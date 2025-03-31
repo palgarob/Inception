@@ -429,3 +429,246 @@ Now that you understand these concepts, the next step is to **apply them in your
 - **Configure caching** to speed up WordPress.
 
 Would you like **hands-on examples** of how to set up each part? 🚀
+
+# **Inception Project - Step-by-Step Guide**
+
+This guide will help you complete the **Inception** project at **42** from scratch, 
+explaining **every concept** thoroughly so that even beginners can follow along.
+
+---
+
+## **1. What Are We Building?**
+
+We are creating a **mini web hosting environment** using **Docker**. This means:
+
+- A **database (MariaDB)** that stores website data.
+- A **website (WordPress)** that retrieves and displays this data.
+- A **web server (NGINX)** that serves the website to users and ensures security.
+
+Each service runs in its own **Docker container**, and they communicate using a **Docker network**.
+
+---
+
+## **2. What is Docker?**
+
+### **The Shipping Container Analogy 🚢**
+
+Imagine you're shipping goods across the world:
+- Each product (app) is placed in a **shipping container**.
+- The containers **always work the same** no matter the ship (computer) they’re placed on.
+
+Docker does the same for software:
+- It **packs applications into containers**.
+- These containers work **exactly the same** on any computer.
+- It ensures **reproducibility**, meaning “it works on my machine” is no longer an issue.
+
+### **Why Use Docker?**
+
+✅ **Portability** - Run apps anywhere.  
+✅ **Isolation** - Each app runs independently.  
+✅ **Reproducibility** - No more “it worked on my machine.”  
+
+---
+
+## **3. Setting Up Your Project**
+
+### **Folder Structure**
+
+```plaintext
+inception/
+│── Makefile
+│── srcs/
+│   │── docker-compose.yml
+│   │── .env
+│   ├── requirements/
+│   │   ├── mariadb/
+│   │   │   ├── Dockerfile
+│   │   │   ├── conf/
+│   │   ├── nginx/
+│   │   │   ├── Dockerfile
+│   │   │   ├── conf/
+│   │   ├── wordpress/
+│   │   │   ├── Dockerfile
+│   │   │   ├── conf/
+│── secrets/
+│   │── db_password.txt
+│   │── db_root_password.txt
+```
+
+---
+
+## **4. Understanding the Services**
+
+### **4.1 MariaDB (Database Server)**
+
+- MariaDB is a **database management system** (like MySQL).  
+- It stores **WordPress posts, users, and settings**.  
+- Data is **persisted** using Docker volumes.  
+
+**MariaDB Dockerfile:**
+
+```dockerfile
+FROM debian:latest
+RUN apt update && apt install -y mariadb-server
+COPY ./conf/my.cnf /etc/mysql/my.cnf
+COPY ./tools/init_db.sh /docker-entrypoint-initdb.d/
+CMD ["mysqld"]
+```
+
+---
+
+### **4.2 WordPress (Website Engine)**
+
+- WordPress is a **PHP-based content management system** (CMS).  
+- It **fetches blog posts from MariaDB** and displays them.  
+- Needs **PHP-FPM** to process PHP files.  
+
+**WordPress Dockerfile:**
+
+```dockerfile
+FROM debian:latest
+RUN apt update && apt install -y php php-fpm php-mysql curl
+COPY ./conf/www.conf /etc/php/7.4/fpm/pool.d/www.conf
+WORKDIR /var/www/html
+COPY ./tools/setup.sh .
+CMD ["php-fpm", "-F"]
+```
+
+---
+
+### **4.3 NGINX (Web Server & Reverse Proxy)**
+
+- NGINX **serves static files** (HTML, CSS, JS).  
+- It **forwards requests** to WordPress using **FastCGI**.  
+- Uses **TLS encryption** for secure connections (HTTPS).  
+
+**NGINX Dockerfile:**
+
+```dockerfile
+FROM alpine:latest
+RUN apk update && apk add nginx openssl
+COPY ./conf/nginx.conf /etc/nginx/nginx.conf
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+---
+
+## **5. Creating `docker-compose.yml`**
+
+Docker Compose **automates** starting multiple containers.
+
+```yaml
+version: '3.8'
+
+services:
+  mariadb:
+    build: ./requirements/mariadb
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+    volumes:
+      - db-data:/var/lib/mysql
+    networks:
+      - inception
+
+  wordpress:
+    build: ./requirements/wordpress
+    environment:
+      - WORDPRESS_DB_HOST=mariadb
+      - WORDPRESS_DB_USER=${MYSQL_USER}
+      - WORDPRESS_DB_PASSWORD=${MYSQL_PASSWORD}
+    volumes:
+      - wp-data:/var/www/html
+    depends_on:
+      - mariadb
+    networks:
+      - inception
+
+  nginx:
+    build: ./requirements/nginx
+    ports:
+      - "443:443"
+    volumes:
+      - wp-data:/var/www/html
+    depends_on:
+      - wordpress
+    networks:
+      - inception
+
+volumes:
+  db-data:
+  wp-data:
+
+networks:
+  inception:
+```
+
+---
+
+## **6. Running the Project**
+
+### **6.1 Installing Docker & Docker Compose**
+
+#### **For Ubuntu**
+```bash
+sudo apt update
+sudo apt install docker.io docker-compose
+sudo systemctl start docker
+sudo systemctl enable docker
+```
+
+#### **For macOS**
+Download and install **Docker Desktop** from [here](https://www.docker.com/products/docker-desktop/).
+
+### **6.2 Automating with Makefile**
+
+Create a `Makefile`:
+
+```make
+all:
+	docker-compose up --build -d
+
+clean:
+	docker-compose down --volumes
+	docker system prune -af
+```
+
+Run:
+```bash
+make all
+```
+
+---
+
+## **7. Accessing Your Website**
+
+1. Open **https://your_login.42.fr** in a browser.
+2. It should show the **WordPress setup page**.
+
+---
+
+## **8. Bonus Ideas**
+
+Once your project works, try:
+- **Redis caching** for WordPress.
+- **An FTP server** for file uploads.
+- **A static website** as an extra service.
+- **Adminer** to manage the database.
+
+---
+
+## **9. Useful Resources**
+
+- [Docker Docs](https://docs.docker.com/)
+- [NGINX + PHP-FPM](https://www.nginx.com/resources/wiki/start/topics/examples/phpfcgi/)
+- [MariaDB Setup](https://mariadb.com/kb/en/docker-and-mariadb/)
+
+---
+
+## **Conclusion**
+
+This guide takes you from **zero to a fully working Docker setup**. 
+If you follow along step-by-step, you’ll successfully complete the **Inception** project. 🚀
+
+Let me know if you need more explanations! 😊
